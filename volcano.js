@@ -1,268 +1,327 @@
+const noise = new SimplexNoise(Math.random);
+
 // Cena, câmera e renderizador
-const scene = new THREE.Scene();
+const cena = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true; // Ativar sombras
-document.getElementById('container').appendChild(renderer.domElement);
+const renderizador = new THREE.WebGLRenderer({ antialias: true });
+renderizador.setSize(window.innerWidth, window.innerHeight);
+renderizador.shadowMap.enabled = true;
+document.getElementById('container').appendChild(renderizador.domElement);
 
-// Luz ambiente e luz direcional
-const ambientLight = new THREE.AmbientLight(0x404040, 2); // Luz suave ambiente
-scene.add(ambientLight);
+// Luzes
+cena.add(new THREE.AmbientLight(0x404040, 2));
+const luzFocal = new THREE.SpotLight(0xffffff, 2);
+luzFocal.position.set(50, 50, 40);
+luzFocal.castShadow = true;
+luzFocal.angle = Math.PI / 4;
+cena.add(luzFocal);
+const luzDirecional = new THREE.DirectionalLight(0xffffff, 1);
+luzDirecional.position.set(50, 100, 50);
+cena.add(luzDirecional);
 
-// Luz focal posicionada acima da ilha
-const spotlight = new THREE.SpotLight(0xffffff, 2);
-spotlight.position.set(50, 50, 40); // Posição da luz acima da ilha
-spotlight.castShadow = true;
-spotlight.angle = Math.PI / 4;
-scene.add(spotlight);
+// Carregamento de texturas
+const carregador = new THREE.TextureLoader();
+const texturaGrama = carregador.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+const texturaPedra = carregador.load('fundo-de-textura-de-pedra-granulada-aspera_653449-5500.avif');
+const texturaLava = carregador.load('https://threejs.org/examples/textures/lava/lavatile.jpg');
+texturaGrama.wrapS = texturaGrama.wrapT = THREE.RepeatWrapping;
+texturaGrama.repeat.set(10, 5);
 
-// Luz direcional adicional para melhor clareza de sombras
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(50, 100, 50); // Posição da luz (acima e à direita da ilha)
-scene.add(directionalLight);
+// Ilha
+const tamanhoIlha = 80;
+const resolucaoIlha = 200;
+const geometriaIlha = new THREE.PlaneGeometry(tamanhoIlha, tamanhoIlha, resolucaoIlha - 1, resolucaoIlha - 1);
+gerarTerreno(geometriaIlha);
 
-// TEXTURAS (corrigindo os links quebrados)
-const loader = new THREE.TextureLoader();
-const grassTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
-const rockTexture = loader.load('fundo-de-textura-de-pedra-granulada-aspera_653449-5500.avif');
-const lavaTexture = loader.load('https://threejs.org/examples/textures/lava/lavatile.jpg');
-
-// Configuração da textura da grama
-grassTexture.wrapS = THREE.RepeatWrapping;
-grassTexture.wrapT = THREE.RepeatWrapping;
-grassTexture.repeat.set(10, 5); // Ajuste este valor para controlar a repetição da textura
-
-// Criação da ilha
-const islandGeometry = new THREE.CircleGeometry(20, 32);
-const grassNormalMap = loader.load('grama.png');
-const islandMaterial = new THREE.MeshStandardMaterial({ 
-    map: grassTexture,
-    normalMap: grassNormalMap,
+const materialIlha = new THREE.MeshStandardMaterial({ 
+    map: texturaGrama,
+    normalMap: carregador.load('grama.png'),
     roughness: 0.8,
     metalness: 0.2
 });
-const island = new THREE.Mesh(islandGeometry, islandMaterial);
-island.rotation.x = -Math.PI / 2;
-island.receiveShadow = true;
-scene.add(island);
+const ilha = new THREE.Mesh(geometriaIlha, materialIlha);
+ilha.rotation.x = -Math.PI / 2;
+ilha.receiveShadow = true;
+cena.add(ilha);
 
-// Vulcão (cone truncado com cratera)
-const volcanoRadius = 8;
-const volcanoHeight = 10;
-const craterRadius = 2;
-const volcanoGeometry = new THREE.CylinderGeometry(craterRadius, volcanoRadius, volcanoHeight, 32, 1, true);
-const volcanoMaterial = new THREE.MeshPhongMaterial({ map: rockTexture });
-const volcano = new THREE.Mesh(volcanoGeometry, volcanoMaterial);
+// Vulcão
+const grupoVulcao = new THREE.Group();
+const vulcao = new THREE.Mesh(
+    new THREE.CylinderGeometry(2, 8, 12, 32, 1, true),
+    new THREE.MeshPhongMaterial({ map: texturaPedra })
+);
+const cratera = new THREE.Mesh(
+    new THREE.CircleGeometry(2, 32),
+    new THREE.MeshBasicMaterial({ color: 0x333333 })
+);
+cratera.rotation.x = -Math.PI / 2;
+cratera.position.y = 5;
+grupoVulcao.add(vulcao, cratera);
+grupoVulcao.position.set(0, 6, 0);
+cena.add(grupoVulcao);
 
-// Cratera (topo do vulcão)
-const craterGeometry = new THREE.CircleGeometry(craterRadius, 32);
-const craterMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
-const crater = new THREE.Mesh(craterGeometry, craterMaterial);
-crater.rotation.x = -Math.PI / 2;
-crater.position.y = volcanoHeight / 2;
-
-// Grupo para o vulcão e suas partículas
-const volcanoGroup = new THREE.Group();
-volcanoGroup.add(volcano);
-volcanoGroup.add(crater);
-
-// Ajuste a posição do grupo do vulcão para ficar no mesmo nível da ilha
-volcanoGroup.position.set(0, 5, 0);
-
-scene.add(volcanoGroup);
-
-// Lava brilhante no topo do vulcão
-const lavaLight = new THREE.PointLight(0xff4500, 3, 20);
-lavaLight.position.set(0, volcanoHeight / 2 + 5, 0);
-volcanoGroup.add(lavaLight);
-
-const barkTexture = loader.load('tronco.jpeg');
-const leavesTexture = loader.load('folhas.jpg');
+// Lava
+const luzLava = new THREE.PointLight(0xff4500, 3, 20);
+luzLava.position.set(0, 12, 0);
+grupoVulcao.add(luzLava);
 
 // Árvores
-function createTree(x, z) {
-    // Tronco
-    const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.2, 2, 12);
-    const trunkMaterial = new THREE.MeshStandardMaterial({ 
-        map: barkTexture,
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, 1, z);
-    trunk.castShadow = true;
-    trunk.receiveShadow = true;
-    scene.add(trunk);
-
-    // Folhas
-    const leavesGeometry = new THREE.SphereGeometry(2, 8, 8);
-    const leavesMaterial = new THREE.MeshStandardMaterial({ 
-        map: leavesTexture,
-        transparent: true,
-        side: THREE.DoubleSide,
-        alphaTest: 0.5,
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
-    leaves.position.set(x, 3, z);
-    leaves.castShadow = true;
-    leaves.receiveShadow = true;
-    scene.add(leaves);
+const texturaTronco = carregador.load('tronco.jpeg');
+const texturaFolhas = carregador.load('folhas.jpg');
+function getAlturaTerreno(x, z) {
+    const raycaster = new THREE.Raycaster(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+    const intersects = raycaster.intersectObject(ilha);
+    if (intersects.length > 0) {
+        return {
+            altura: intersects[0].point.y,
+            normal: intersects[0].face.normal
+        };
+    }
+    return null; // Retorna null se não houver interseção com a ilha
 }
 
-// Adicionar árvores
-for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const x = Math.cos(angle) * 15;
-    const z = Math.sin(angle) * 15;
-    createTree(x, z);
+
+
+
+
+
+
+function criarArvore(x, z) {
+    const alturaTerreno = getAlturaTerreno(x, z);
+    if (!alturaTerreno) return; // Não cria a árvore se não estiver na ilha
+
+    const grupoArvore = new THREE.Group();
+
+    const tronco = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 2, 12),
+        new THREE.MeshStandardMaterial({ map: texturaTronco, roughness: 0.8, metalness: 0.2 })
+    );
+    tronco.position.y = 1; // Metade da altura do tronco
+    tronco.castShadow = tronco.receiveShadow = true;
+    grupoArvore.add(tronco);
+
+    const folhas = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 8, 8),
+        new THREE.MeshStandardMaterial({ map: texturaFolhas, transparent: true, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.8, metalness: 0.2 })
+    );
+    folhas.position.y = 3; // Topo do tronco + 1 unidade
+    folhas.castShadow = folhas.receiveShadow = true;
+    grupoArvore.add(folhas);
+
+    // Alinhar a árvore com a normal da superfície
+    const normalTerreno = alturaTerreno.normal;
+    const eixoRotacao = new THREE.Vector3(0, 1, 0).cross(normalTerreno).normalize();
+    const anguloRotacao = Math.acos(new THREE.Vector3(0, 1, 0).dot(normalTerreno));
+    grupoArvore.setRotationFromAxisAngle(eixoRotacao, anguloRotacao);
+
+    // Posicionar o grupo da árvore
+    grupoArvore.position.set(x, alturaTerreno.altura, z);
+
+    ilha.add(grupoArvore);
 }
+
+// Distribuir árvores no terreno
+const numeroArvores = 30;
+let tentativas = 0;
+const maxTentativas = 400;
+let arvoresCriadas = 0;
+const distanciaMinima = 2; // Distância mínima entre árvores
+const arvoresExistentes = []; // Array para armazenar as posições das árvores existentes
+
+function distanciaMinimaSuficiente(x, z) {
+    for (let arvore of arvoresExistentes) {
+        const dx = x - arvore.x;
+        const dz = z - arvore.z;
+        const distancia = Math.sqrt(dx * dx + dz * dz);
+        if (distancia < distanciaMinima) {
+            return false;
+        }
+    }
+    return true;
+}
+
+while (arvoresCriadas < numeroArvores && tentativas < maxTentativas) {
+    let x = (Math.random() - 0.5) * tamanhoIlha;
+    let z = (Math.random() - 0.5) * tamanhoIlha;
+    
+    const distanciaCentro = Math.sqrt(x*x + z*z);
+    if (distanciaCentro <= tamanhoIlha / 2) { // Permite árvores em toda a ilha, exceto no centro imediato
+        const alturaTerreno = getAlturaTerreno(x, z);
+        if (alturaTerreno && alturaTerreno.altura > 0 && distanciaMinimaSuficiente(x, z)) {
+            criarArvore(x, z);
+            arvoresExistentes.push({x, z});
+            arvoresCriadas++;
+        }
+    }
+    
+    tentativas++;
+}
+
+console.log(`Árvores criadas: ${arvoresCriadas}`);
+
+
+
 
 // Pedras
-function createRock(x, z) {
-    const rockGeometry = new THREE.IcosahedronGeometry(1, 1);
-    const rockMaterial = new THREE.MeshStandardMaterial({ map: rockTexture });
-    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-    rock.position.set(x, 0.5, z);
-    rock.castShadow = true;
-    scene.add(rock);
+function criarPedra(x, z) {
+    const alturaTerreno = getAlturaTerreno(x, z);
+    const pedra = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(1, 1),
+        new THREE.MeshStandardMaterial({ map: texturaPedra })
+    );
+    pedra.position.set(x, alturaTerreno + 0.5, z);
+    pedra.castShadow = true;
+    cena.add(pedra);
 }
-
-// Adicionar pedras
 for (let i = 0; i < 6; i++) {
-    const x = (Math.random() - 0.5) * 20;
-    const z = (Math.random() - 0.5) * 20;
-    createRock(x, z);
+    criarPedra((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20);
 }
 
-// Controle de câmera (OrbitControls)
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.screenSpacePanning = false;
-controls.maxPolarAngle = Math.PI / 2;
-controls.minDistance = 10;
-controls.maxDistance = 50;
 
-// Configuração da câmera inicial
+
+
+
+// Plano de fundo
+const fundo = new THREE.Mesh(
+    new THREE.PlaneGeometry(100, 100),
+    new THREE.MeshBasicMaterial({ map: carregador.load('Agua.jpeg') })
+);
+fundo.rotation.x = -Math.PI / 2;
+fundo.position.y = -0.1;
+cena.add(fundo);
+
+// Controle de câmera
+const controles = new THREE.OrbitControls(camera, renderizador.domElement);
+controles.enableDamping = true;
+controles.dampingFactor = 0.05;
+controles.screenSpacePanning = false;
+controles.maxPolarAngle = Math.PI / 2;
+controles.minDistance = 10;
+controles.maxDistance = 50;
 camera.position.set(0, 15, 30);
 camera.lookAt(0, 0, 0);
 
-// Sistema de partículas para simular erupção
-const particleCount = 10000;
-const particles = new THREE.BufferGeometry();
-const particlePositions = new Float32Array(particleCount * 3);
-const particleVelocities = new Float32Array(particleCount * 3);
-
-for (let i = 0; i < particleCount; i++) {
-    resetParticle(i);
+// Partículas de erupção
+const contagemParticulas = 20000;
+const particulas = new THREE.BufferGeometry();
+const posicoesParticulas = new Float32Array(contagemParticulas * 3);
+const velocidadesParticulas = new Float32Array(contagemParticulas * 3);
+for (let i = 0; i < contagemParticulas; i++) reiniciarParticula(i);
+function reiniciarParticula(indice) {
+    const angulo = Math.random() * Math.PI * 2;
+    const raio = Math.random() * 2;
+    posicoesParticulas[indice * 3] = Math.cos(angulo) * raio;
+    posicoesParticulas[indice * 3 + 1] = 5;
+    posicoesParticulas[indice * 3 + 2] = Math.sin(angulo) * raio;
+    const velocidade = 0.2 + Math.random() * 0.1;
+    const angulo3D = Math.random() * Math.PI * 2;
+    const elevacao = Math.random() * Math.PI / 6 + Math.PI / 12;
+    velocidadesParticulas[indice * 3] = Math.cos(angulo3D) * Math.sin(elevacao) * velocidade;
+    velocidadesParticulas[indice * 3 + 1] = Math.cos(elevacao) * velocidade;
+    velocidadesParticulas[indice * 3 + 2] = Math.sin(angulo3D) * Math.sin(elevacao) * velocidade;
 }
-
-function resetParticle(index) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * craterRadius;
-    particlePositions[index * 3] = Math.cos(angle) * radius;
-    particlePositions[index * 3 + 1] = volcanoHeight / 2;
-    particlePositions[index * 3 + 2] = Math.sin(angle) * radius;
-
-    const speed = 0.2 + Math.random() * 0.1;
-    const angle3D = Math.random() * Math.PI * 2;
-    const elevation = Math.random() * Math.PI / 6 + Math.PI / 12; // Entre 15 e 45 graus
-    particleVelocities[index * 3] = Math.cos(angle3D) * Math.sin(elevation) * speed;
-    particleVelocities[index * 3 + 1] = Math.cos(elevation) * speed;
-    particleVelocities[index * 3 + 2] = Math.sin(angle3D) * Math.sin(elevation) * speed;
-}
-
-particles.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-
-const particleMaterial = new THREE.PointsMaterial({
-    map: lavaTexture,
+particulas.setAttribute('position', new THREE.BufferAttribute(posicoesParticulas, 3));
+const sistemaParticulas = new THREE.Points(particulas, new THREE.PointsMaterial({
+    map: texturaLava,
     color: 0xff4500,
     size: 0.3,
     transparent: true,
     opacity: 0.9
-});
+}));
+grupoVulcao.add(sistemaParticulas);
 
-const particleSystem = new THREE.Points(particles, particleMaterial);
-volcanoGroup.add(particleSystem);
+// Controle de erupção
+let estaEruptando = false;
+let temporizadorErupcao = Date.now();
+const intervaloErupcao = 10000;
+let jaEruptou = false;
+let tempoInicioErupcao = 0;
+const duracaoErupcaoIntensa = 20000; // 20 segundos
 
-// Variáveis de controle para a erupção
-let isErupting = false;
-let eruptionTimer = 0;
-const eruptionInterval = 10000; // 10 segundos em milissegundos
-
-// Função para iniciar a erupção
-function startEruption() {
-    isErupting = true;
-    // Reiniciar todas as partículas
-    for (let i = 0; i < particleCount; i++) {
-        resetParticle(i);
-    }
+function iniciarErupcao() {
+    estaEruptando = true;
+    tempoInicioErupcao = Date.now();
+    for (let i = 0; i < contagemParticulas; i++) reiniciarParticula(i);
 }
 
-// Função para parar a erupção
-function stopEruption() {
-    isErupting = false;
-}
-
-// Animação de erupção
-function animate() {
-    requestAnimationFrame(animate);
-
-    const currentTime = Date.now();
-    if (currentTime - eruptionTimer > eruptionInterval) {
-        if (isErupting) {
-            stopEruption();
-        } else {
-            startEruption();
-        }
-        eruptionTimer = currentTime;
+function animar() {
+    requestAnimationFrame(animar);
+    const tempoAtual = Date.now();
+    
+    if (!jaEruptou && tempoAtual - temporizadorErupcao >= intervaloErupcao) {
+        iniciarErupcao();
+        temporizadorErupcao = tempoAtual;
+        jaEruptou = true;
     }
-
-    const positions = particleSystem.geometry.attributes.position.array;
-    for (let i = 0; i < particleCount; i++) {
-        if (isErupting) {
-            positions[i * 3] += particleVelocities[i * 3];
-            positions[i * 3 + 1] += particleVelocities[i * 3 + 1];
-            positions[i * 3 + 2] += particleVelocities[i * 3 + 2];
-
-            // Aplica gravidade
-            particleVelocities[i * 3 + 1] -= 0.006;
-
-            // Verifica se a partícula atingiu a base da ilha
-            if (positions[i * 3 + 1] + volcanoGroup.position.y <= 0) {
-                resetParticle(i);
+    
+    const posicoes = sistemaParticulas.geometry.attributes.position.array;
+    const tempoDecorrido = tempoAtual - tempoInicioErupcao;
+    
+    for (let i = 0; i < contagemParticulas; i++) {
+        if (estaEruptando) {
+            posicoes[i * 3] += velocidadesParticulas[i * 3];
+            posicoes[i * 3 + 1] += velocidadesParticulas[i * 3 + 1];
+            posicoes[i * 3 + 2] += velocidadesParticulas[i * 3 + 2];
+            
+            // Calcula a taxa de desaceleração com base no tempo decorrido
+            let taxaDesaceleracao = 0.002;
+            if (tempoDecorrido > duracaoErupcaoIntensa) {
+                const tempoAposIntensidade = tempoDecorrido - duracaoErupcaoIntensa;
+                taxaDesaceleracao = 0.002 + (tempoAposIntensidade / 1000) * 0.0008; // Aumenta gradualmente até 0.02
+                taxaDesaceleracao = Math.min(taxaDesaceleracao, 0.02); // Limita a 0.02
             }
-
-            // Se a partícula sair muito longe, reinicie-a
-            if (Math.abs(positions[i * 3]) > 20 || Math.abs(positions[i * 3 + 2]) > 20) {
-                resetParticle(i);
+            
+            velocidadesParticulas[i * 3 + 1] -= taxaDesaceleracao;
+            
+            if (posicoes[i * 3 + 1] + grupoVulcao.position.y <= 0 || Math.abs(posicoes[i * 3]) > 20 || Math.abs(posicoes[i * 3 + 2]) > 20) {
+                reiniciarParticula(i);
             }
         } else {
-            // Quando não está em erupção, esconde as partículas dentro do vulcão
-            positions[i * 3] = 0;
-            positions[i * 3 + 1] = -volcanoHeight / 2;
-            positions[i * 3 + 2] = 0;
+            posicoes[i * 3] = 0;
+            posicoes[i * 3 + 1] = -5;
+            posicoes[i * 3 + 2] = 0;
         }
     }
-
-    particleSystem.geometry.attributes.position.needsUpdate = true;
-    controls.update();
-    renderer.render(scene, camera);
+    sistemaParticulas.geometry.attributes.position.needsUpdate = true;
+    controles.update();
+    renderizador.render(cena, camera);
 }
 
-// Inicializa o temporizador
-eruptionTimer = Date.now();
-
-animate();
-
-// Ajuste de redimensionamento
+animar();
 window.addEventListener('resize', () => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    renderer.setSize(width, height);
-    camera.aspect = width / height;
+    const largura = window.innerWidth;
+    const altura = window.innerHeight;
+    renderizador.setSize(largura, altura);
+    camera.aspect = largura / altura;
     camera.updateProjectionMatrix();
 });
+
+function gerarTerreno(geometria) {
+    const posicoes = geometria.attributes.position.array;
+    const tamanho = Math.sqrt(posicoes.length / 3);
+    
+    for (let i = 0; i < posicoes.length; i += 3) {
+        const x = (i / 3) % tamanho;
+        const y = Math.floor(i / 3 / tamanho);
+        
+        // Aumentar a escala do ruído para criar elevações mais pronunciadas
+        let elevacao = noise.noise2D(x / 50, y / 50) * 5;
+        elevacao += noise.noise2D(x / 25, y / 25) * 2.5;
+        elevacao += noise.noise2D(x / 12.5, y / 12.5) * 1.25;
+        
+        // Criar uma depressão no centro para o vulcão
+        const centroX = tamanho / 2;
+        const centroY = tamanho / 2;
+        const distanciaCentro = Math.sqrt(Math.pow(x - centroX, 2) + Math.pow(y - centroY, 2));
+        const raioDepressao = tamanho / 4;
+        if (distanciaCentro < raioDepressao) {
+            elevacao -= (1 - distanciaCentro / raioDepressao) * 3;
+        }
+        
+        // Aplicar a elevação
+        posicoes[i + 2] = elevacao;
+    }
+    
+    geometria.attributes.position.needsUpdate = true;
+    geometria.computeVertexNormals();
+}
