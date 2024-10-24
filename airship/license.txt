@@ -1,0 +1,11 @@
+Model Information:
+* title:	Airship
+* source:	https://sketchfab.com/3d-models/airship-7e749c4115af497a85d39265b3a33ae5
+* author:	Shinsin (https://sketchfab.com/Shinsin)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Airship" (https://sketchfab.com/3d-models/airship-7e749c4115af497a85d39265b3a33ae5) by Shinsin (https://sketchfab.com/Shinsin) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

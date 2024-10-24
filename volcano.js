@@ -1,5 +1,5 @@
 const noise = new SimplexNoise(Math.random);
-
+const teclasPressionadas = {};
 // Cena, câmera e renderizador
 const cena = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -190,16 +190,7 @@ fundo.rotation.x = -Math.PI / 2;
 fundo.position.y = -0.1;
 cena.add(fundo);
 
-// Controle de câmera
-const controles = new THREE.OrbitControls(camera, renderizador.domElement);
-controles.enableDamping = true;
-controles.dampingFactor = 0.05;
-controles.screenSpacePanning = false;
-controles.maxPolarAngle = Math.PI / 2;
-controles.minDistance = 10;
-controles.maxDistance = 50;
-camera.position.set(0, 15, 30);
-camera.lookAt(0, 0, 0);
+
 
 // Partículas de erupção
 const contagemParticulas = 20000;
@@ -237,6 +228,38 @@ const intervaloErupcao = 10000;
 let jaEruptou = false;
 let tempoInicioErupcao = 0;
 const duracaoErupcaoIntensa = 20000; // 20 segundos
+
+// Adicione esta função para controlar o movimento da aeronave
+function moverAeronave() {
+    if (teclasPressionadas['ArrowUp']) {
+        grupoAeronave.translateZ(-velocidadeAeronave);
+    }
+    if (teclasPressionadas['ArrowDown']) {
+        grupoAeronave.translateZ(velocidadeAeronave);
+    }
+    if (teclasPressionadas['ArrowLeft']) {
+        grupoAeronave.rotateY(rotacaoAeronave);
+    }
+    if (teclasPressionadas['ArrowRight']) {
+        grupoAeronave.rotateY(-rotacaoAeronave);
+    }
+    // Adicione estas linhas para o movimento vertical
+    if (teclasPressionadas['KeyW']) {
+        grupoAeronave.translateY(velocidadeAeronave);
+    }
+    if (teclasPressionadas['KeyS']) {
+        grupoAeronave.translateY(-velocidadeAeronave);
+    }
+}
+
+// Adicione estes event listeners após a declaração da função moverAeronave
+window.addEventListener('keydown', (event) => {
+    teclasPressionadas[event.code] = true;
+});
+
+window.addEventListener('keyup', (event) => {
+    teclasPressionadas[event.code] = false;
+});
 
 function iniciarErupcao() {
     estaEruptando = true;
@@ -283,7 +306,7 @@ function animar() {
         }
     }
     sistemaParticulas.geometry.attributes.position.needsUpdate = true;
-    controles.update();
+    moverAeronave();
     renderizador.render(cena, camera);
 }
 
@@ -325,3 +348,86 @@ function gerarTerreno(geometria) {
     geometria.attributes.position.needsUpdate = true;
     geometria.computeVertexNormals();
 }
+
+// Após a declaração da câmera e antes da criação do renderizador
+
+const grupoAeronave = new THREE.Group();
+const carregadorGLTF = new THREE.GLTFLoader();
+
+carregadorGLTF.load(
+    'airship/scene.gltf',
+    function (gltf) {
+        const modelo = gltf.scene;
+        modelo.scale.set(0.1, 0.1, 0.1); // Ajuste a escala conforme necessário
+        
+        // Rotacionar o modelo para que fique virado para frente
+        modelo.rotation.y = Math.PI / 2; // Rotação de 90 graus em torno do eixo Y
+        
+        grupoAeronave.add(modelo);
+        cena.add(grupoAeronave);
+    },
+    undefined,
+    function (error) {
+        console.error('Erro ao carregar o modelo:', error);
+    }
+);
+
+// Posição inicial da aeronave
+grupoAeronave.position.set(0, 15, 25);
+
+// Após a criação do grupoAeronave
+const velocidadeAeronave = 0.1;
+const rotacaoAeronave = 0.02;
+
+// Remova ou comente a linha que adiciona os controles OrbitControls
+// const controles = new THREE.OrbitControls(camera, renderizador.domElement);
+
+// Substitua a configuração inicial da câmera por:
+camera.position.set(0, 1.2, 3);
+grupoAeronave.add(camera);
+
+// Modifique a função animar para incluir o movimento da aeronave
+function animar() {
+    requestAnimationFrame(animar);
+    const tempoAtual = Date.now();
+    
+    if (!jaEruptou && tempoAtual - temporizadorErupcao >= intervaloErupcao) {
+        iniciarErupcao();
+        temporizadorErupcao = tempoAtual;
+        jaEruptou = true;
+    }
+    
+    const posicoes = sistemaParticulas.geometry.attributes.position.array;
+    const tempoDecorrido = tempoAtual - tempoInicioErupcao;
+    
+    for (let i = 0; i < contagemParticulas; i++) {
+        if (estaEruptando) {
+            posicoes[i * 3] += velocidadesParticulas[i * 3];
+            posicoes[i * 3 + 1] += velocidadesParticulas[i * 3 + 1];
+            posicoes[i * 3 + 2] += velocidadesParticulas[i * 3 + 2];
+            
+            // Calcula a taxa de desaceleração com base no tempo decorrido
+            let taxaDesaceleracao = 0.002;
+            if (tempoDecorrido > duracaoErupcaoIntensa) {
+                const tempoAposIntensidade = tempoDecorrido - duracaoErupcaoIntensa;
+                taxaDesaceleracao = 0.002 + (tempoAposIntensidade / 1000) * 0.0008; // Aumenta gradualmente até 0.02
+                taxaDesaceleracao = Math.min(taxaDesaceleracao, 0.02); // Limita a 0.02
+            }
+            
+            velocidadesParticulas[i * 3 + 1] -= taxaDesaceleracao;
+            
+            if (posicoes[i * 3 + 1] + grupoVulcao.position.y <= 0 || Math.abs(posicoes[i * 3]) > 20 || Math.abs(posicoes[i * 3 + 2]) > 20) {
+                reiniciarParticula(i);
+            }
+        } else {
+            posicoes[i * 3] = 0;
+            posicoes[i * 3 + 1] = -5;
+            posicoes[i * 3 + 2] = 0;
+        }
+    }
+    sistemaParticulas.geometry.attributes.position.needsUpdate = true;
+    moverAeronave();
+    renderizador.render(cena, camera);
+}
+
+
